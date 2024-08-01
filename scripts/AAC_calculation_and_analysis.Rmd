@@ -1,0 +1,275 @@
+---
+title: "AAC analysis"
+author: "Megan Hasoon"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+# Script for generating alternative allele counts (AAC) and running analysis
+
+```{r, libraries}
+library(VariantAnnotation)
+library(tidyverse)
+library(here)
+```
+
+## Calculation of AAC
+
+```{r}
+
+#read in vcf file
+
+all_data_vcf <- vcfR::read.vcfR(here("data/riskfactor.vcf", convertNA = T))
+
+vcf_new <- readVcf(here("data/riskfactor.vcf"))
+geno_vcf <- as.data.frame(geno(vcf_new)$GT)
+geno_vcf_mat <- as.data.frame(t(geno_vcf))
+geno_vcf_mat$ID <- rownames(geno_vcf_mat)
+
+
+geno_vcf_mat[geno_vcf_mat == "1|0"] <- "1/0"
+geno_vcf_mat[geno_vcf_mat == "0|1"] <- "0/1"
+geno_vcf_mat[geno_vcf_mat == "0|0"] <- "0/0"
+geno_vcf_mat[geno_vcf_mat == "1|1"] <- "1/1"
+geno_vcf_mat[geno_vcf_mat == "./."] <- NA
+
+
+
+t_geno <- as.data.frame(t(geno_vcf_mat))
+geno_vcf_mat_filter <-geno_vcf_mat %>% filter(!if_any(everything(), ~ grepl("NA", .)))
+geno_vcf_mat_filt2 <- na.omit(geno_vcf_mat)
+geno_vcf_mat_filt2 <- as.data.frame(t(geno_vcf_mat_filt2))
+
+```
+
+```{r}
+#filter out NA from the vcf matrix (removes patients with incomplete data across all 4100 snps)
+geno_vcf_mat_filter <- geno_vcf_mat %>% filter(!if_any(everything(), ~ grepl("NA", .)))
+
+## get "info" from vcf file - need the the annotation value and rsID
+all_vcf_info <- vcfR::extract.info(all_data_vcf, element = "ANN")
+
+vcf_info_rs <- vcfR::extract.info(all_data_vcf, element = "RS")
+# make into dataframe and tidy
+all_vcf_info <- as.data.frame(all_vcf_info)
+
+
+rownames(all_vcf_info) <- colnames(risk_counts[1:4100])
+# split info by delimiter
+all_vcf_info_split <- data.frame(str_split(all_vcf_info$all_data_info, "\\|", simplify=TRUE))
+View(all_data_info_split)
+
+# keep annotation and gene name info and annotation SNP info
+all_data_info_split <- subset(all_data_info_split, select = c(X3, X4))
+colnames(all_data_info_split) <- c("ANN", "gene")
+View(all_data_info_split)
+
+# add SNP name to info
+all_data_info_split$SNP <- colnames(risk_counts[1:4100])
+View(all_data_info_split)
+
+
+```
+
+```{r}
+
+#add column for value based on annotation
+all_data_info_split <- add_column(all_data_info_split,ANN_value= "na", .after = "ANN")
+all_data_info_split$ANN_value <- ifelse(all_data_info_split$ANN == "LOW", "1",
+ifelse(all_data_info_split$ANN == "MODERATE", "2",
+ifelse(all_data_info_split$ANN == "HIGH", "3",
+ifelse(all_data_info_split$ANN == "MODIFIER", "1",
+"No"))))
+```
+
+
+
+
+```{r}
+
+# change the allele annotation to number based on number of alt alleles
+
+geno_vcf_mat_filter[geno_vcf_mat_filter == "1/0"] <- "1"
+geno_vcf_mat_filter[geno_vcf_mat_filter == "0/1"] <- "1"
+geno_vcf_mat_filter[geno_vcf_mat_filter == "0/0"] <- "0"
+geno_vcf_mat_filter[geno_vcf_mat_filter == "1/1"] <- "2"
+geno_vcf_mat_filter <- geno_vcf_mat_filter %>% mutate_if(is.character, as.numeric)
+geno_vcf_mat_filter_t <- as.data.frame(t(geno_vcf_mat_filter))
+View(geno_vcf_mat_filter_t)
+geno_vcf_mat_filter_t$SNP <- rownames(geno_vcf_mat_filter_t)
+```
+
+
+```{r}
+#combine allele info with matrix
+combine_info <- left_join(geno_vcf_mat_filter_t, all_data_info_split, by="SNP")
+View(combine_info)
+```
+
+
+```{r}
+
+#multiple alterative allele value for each SNP by the ANN value
+combine_info$ANN_value <- as.numeric(combine_info$ANN_value)
+multiply_matrix <- combine_info
+
+str(multiply_matrix)
+
+for(i in colnames(combine_info[1:269])){
+print(i)
+multiply_matrix[, i] <- mapply(FUN = "*",
+combine_info[[i]],
+combine_info[["ANN_value"]])
+}
+
+#transpose
+multiply_matrix_t <- as.data.frame(t(multiply_matrix))
+
+#remove bottom column with ID
+
+
+multiply_matrix_t <- multiply_matrix_t[,-4101]
+multiply_matrix_t <- multiply_matrix_t[-270:-273,]
+
+
+#rowSums to get alt allele count, weighted by ANN, acrosss each patient
+
+multiply_matrix_t <- multiply_matrix_t %>% mutate_if(is.character, as.numeric)
+multiply_matrix_t$sum <- rowSums(multiply_matrix_t)
+multiply_matrix_t$Patient_ID <- rownames(multiply_matrix_t)
+
+minors_weighted <- multiply_matrix_t[,4101:4102]
+View(minors_weighted)
+
+```
+
+
+#analysis
+
+
+```{r}
+
+#read in meta data
+
+demos <- read.csv(here("/data/JSLE_combined_meta_treatment_updated24_.csv"), na.strings=c("","NA"))
+demos$Patient_ID <- as.character(demos$Patient_ID)
+
+```
+
+
+
+```{r}
+## join minor allele counts to meta 
+
+minors_weighted
+AAC_freq <- left_join(demos, minors_weighted, by="Patient_ID")
+
+#315 patients
+AAC_freq_filter <- AAC_freq %>% filter(Tag == "include")
+
+# 238 patients remain
+AAC_freq_filter.na <- na.omit(AAC_freq_filter)
+
+
+```
+
+
+
+```{r}
+
+#Run glm
+#Ethnicity, gender and family history of SLE included as co-variates
+
+#anovaList will capture p val from variable
+
+
+vars_to_test <- colnames(demos[4:ncol(demos)])
+
+#remove things we do not want to test
+#leaves 21 variables
+vars_to_test <- vars_to_test[! vars_to_test %in% c("Gender", "Ethnicity_def", "FamilyHistoryAutoimmuneDiseases", "LSLICCTotal", "SLEDAI_first", "SLEDAI_highest", "BILAG_highest", "BILAG_first","Flare_count_AnySEVERity", "Flare_per_year", "SLICC_last")]
+
+
+anovaList <- list()
+
+for (i in vars_to_test){ 
+  model <- glm(paste("sum ~", i, paste("+Ethnicity_def + Gender + FamilyHistoryAutoimmuneDiseases")), family = "poisson", data=AAC_freq_filter.na)
+ anova <- anova(model, test="Chi")
+  anovaList[i] <- anova$`Pr(>Chi)`[2]
+} 
+
+
+#convert to dataframe
+AAC_pvalues <- as.data.frame(do.call("rbind", anovaList))
+
+#do fdr adjustment
+adjust <- p.adjust(AAC_pvalues$V1, method = "fdr", n=length(AAC_pvalues$V1))
+AAC_pvalues$adjusted_pval <- adjust
+
+```
+
+
+
+
+```{r}
+
+AAC_freq_filter.na <- AAC_freq_filter.na %>%
+mutate(Treament_Group = ifelse(Treament_Group == "Aggressive", "Intensive", "Non-intensive"))
+
+
+##Treatment posthoc tests
+
+model <- glm(sum ~ Treament_Group*Ethnicity_def + Gender + FamilyHistoryAutoimmuneDiseases, family = "poisson", data=AAC_freq_filter.na)
+anova <- anova(model, test="Chi")
+
+
+library(lsmeans)
+lsmeans(model, pairwise ~ Treament_Group|Ethnicity_def, adjust = "tukey")
+
+
+
+
+```
+
+
+#correlation - aac vs diganosis age within ethnicity groups
+```{r}
+
+# Get unique ethnicity values
+ethnicities <- unique(AAC_freq_filter.na$Ethnicity_def)
+
+# Create an empty list to store correlation results
+correlation_results <- list()
+
+# Loop through each ethnicity
+for (ethnicity in ethnicities) {
+  # Subset the dataframe for the current ethnicity
+  subset_df <- subset(AAC_freq_filter.na, Ethnicity_def == ethnicity)
+  
+  # Calculate correlation between count and diagnosis age within the current ethnicity
+  correlation <- cor.test(subset_df$sum, subset_df$Diagnosis_Age, method = "pearson")
+  
+  # Store the correlation result
+  correlation_results[[ethnicity]] <- correlation
+}
+
+correlation_results
+
+#caucasian
+p.adjust(0.871, n=5, method="fdr")
+#south asian
+p.adjust(0.009397, n=5, method="fdr")
+#any other asian
+p.adjust(0.01555, n=5, method="fdr")
+#black aff/carr
+p.adjust(0.319, n=5, method="fdr")
+#east asian
+p.adjust(0.8618, n=5, method="fdr")
+
+```
+
+

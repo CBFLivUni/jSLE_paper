@@ -1,0 +1,409 @@
+---
+title: "paper_figures"
+author: "Megan Hasoon"
+date: "2024-07-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(ggvenn)
+```
+
+
+```{r}
+
+#read in data
+
+AAC_freq_filter.na <- read.csv(here("data/AAC_freq_filter.na"))
+GAAS_ <- read.csv()
+demos <- read.csv(here("data/JSLE_metadata_updated24_.csv"), na.strings=c("","NA"))
+demos$Patient_ID <- as.character(demos$Patient_ID)
+  
+```
+
+
+
+#Figure 1
+
+```{r}
+
+#venn
+
+venn_list2 <- list(
+  `GAAS only` = rownames(jsle_combned),
+  `AAC & GAAS`= AAC_freq_filter.na$Patient_ID
+)
+
+
+colors <- c("skyblue", "lightcoral")
+venn <- ggvenn(venn_list2, 
+       fill_color = colors, 
+       stroke_color = "black", 
+       text_size = 20, 
+       set_name_size = 20, auto_scale = TRUE) 
+
+venn$layers[[3]]$data$x <- c(-0.7, 0.4)
+
+
+
+demos_plots <- demos %>% filter(Tag == "include") %>%
+  mutate(analysis_set = ifelse(Patient_ID %in% AAC_freq_filter.na$Patient_ID, "AAC & GAAS", NA))%>%
+  mutate(analysis_set = ifelse(Patient_ID %in% rownames(jsle_combned) & is.na(analysis_set), "GAAS only", analysis_set ))
+demos_plots <- demos_plots %>% filter(!is.na(analysis_set))
+
+demos_plots_aac <- demos_plots %>% filter(analysis_set == "AAC & GAAS")
+median_age_aac <- median(demos_plots_aac$Diagnosis_Age, na.rm = TRUE)
+median_age <- median(demos_plots$Diagnosis_Age, na.rm = TRUE)
+
+p1 <- ggplot(demos_plots, aes(x = Diagnosis_Age)) +
+  geom_histogram() +
+  labs(x = "Diagnosis Age", y="Number of patients") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 50, angle = 45, hjust = 1) + scale_x_discrete(labels = function(x) str_wrap(x, width = 3))) +
+  theme_bw(base_size = 50) + ggtitle("Age demographics") +
+  geom_vline(aes(xintercept = median_age), linetype = "dotted", color = "black", size = 5)
+
+
+p2 <- ggplot(demos_plots, aes(x =factor(Ethnicity_def, levels = ethnicity_order))) +
+  geom_bar() +
+  labs(x = "Ethnicity", y="Number of patients") +
+  theme_minimal() +
+  theme(text = element_text(size = 50))+ scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) +
+  theme_bw(base_size = 50) + ggtitle("Ethnicity demographics")
+
+
+
+plot1<-plot_grid(p1,p2, ncol=2, align='vh', vjust=1, scale = 1)
+#plot1 <- ggdraw(add_sub(plot1, "Patients included in GAAS analysis", vpadding=grid::unit(0,"lines"), y=4, x= 0.5, vjust=-22, size = 50, fontface = "bold"))
+plot1
+
+
+
+demos_plots_aac <- demos_plots %>% filter(analysis_set == "AAC & GAAS")
+
+p1 <- ggplot(demos_plots_aac, aes(x = Diagnosis_Age)) +
+  geom_histogram() +
+  labs(x = "Diagnosis Age", y="Number of patients") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 40, angle = 45, hjust = 1) + scale_x_discrete(labels = function(x) str_wrap(x, width = 5))) +
+  theme_bw(base_size = 50) + ggtitle("Age demographics")+
+  geom_vline(aes(xintercept = median_age_aac), linetype = "dotted", color = "black", size = 5)
+
+
+p2 <- ggplot(demos_plots_aac, aes(x =factor(Ethnicity_def, levels = ethnicity_order))) +
+  geom_bar() +
+  labs(x = "Ethnicity", y="Number of patients") +
+  theme_minimal() + theme(text = element_text(size = 50))+ scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) +
+  theme_bw(base_size = 50) + ggtitle("Ethnicity demographics") 
+
+plot2<-plot_grid(p1,p2, ncol=2, align='vh', vjust=1, scale = 1)
+#plot2 <- ggdraw(add_sub(plot2, "Patients included in AAC analysis", vpadding=grid::unit(0,"lines"), y=4, x= 0.5, vjust=-22, size = 50, fontface = "bold"))
+plot2
+
+
+
+plot_fin <- plot_grid(venn, plot1,plot2, ncol=1, labels="AUTO", label_size = 90, scale = 0.9) + theme(plot.background = element_rect(fill = "white"))
+
+plot_fin
+
+
+
+
+
+```
+
+
+
+#Figure 2
+
+```{r}
+
+p1 <- ggplot(AAC_freq_filter.na, aes(Diagnosis_Age, sum)) + geom_point(size=3) + geom_smooth(method='lm', formula= y~x, colour="black", size=2) 
+p1 <- p1 + labs(x ="Diagnosis Age", y = "Alternative Allele Count") + theme_bw(base_size = 40)
+
+p2 <- ggplot(minor_freq.na, aes(Diagnosis_Age, sum, group=factor(Ethnicity_def, levels = ethnicity_order), colour=factor(Ethnicity_def, levels = ethnicity_order))) + geom_point(size=3) + geom_smooth(method='lm', formula= y~x, size=2) 
+p2 <- p2 + labs(x ="Diagnosis Age", y = "Alternative Allele Count" , colour = "Ethnicity") + theme_bw(base_size = 40)
+
+
+plot <- plot_grid(p1,p2, ncol = 2, rel_widths = c(0.7, 1), labels = "AUTO", label_size = 50)
+plot
+
+
+```
+
+
+#Figure 3
+
+```{r}
+
+ethnicity_order <- c("Black African/Caribbean", "Caucasian", "East Asian", "South Asian", "Any other Asian Background")
+
+p1 <-  ggplot(AAC_freq_filter.na, aes(factor(Ethnicity_def, levels = ethnicity_order), sum)) + geom_boxplot(aes(fill=Gender))
+p1 <- p1 + theme_bw(base_size = 40) + labs(x ="Ethnicity", y = "Alternative Allele Count" , colour = "Sex") + theme() +
+scale_x_discrete(labels = function(x) str_wrap(x, width = 5))
+
+p1
+
+
+### preprocessing in gene level analyses
+
+p2 <- ggplot(d1, aes(PC1, PC2, colour = factor(Ethnicity_def, levels = ethnicity_order), id = Patient_ID, label = Patient_ID)) +
+  geom_point(size = 3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) +
+  theme_bw(base_size = 40) +
+  theme(axis.title=element_text(face="bold"))
+p2 <- p2 + labs(colour = "Ethnicity")
+
+
+plot <- plot_grid(p1,p2, ncol = 2, rel_widths = c(0.9, 1), 
+                  labels = "AUTO", label_size = 50)
+plot
+
+```
+
+
+
+
+
+#figure 5
+
+
+```{r}
+
+p1 <-  ggplot(jsle_combned, aes(x=factor(Neuropsychiatric2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), ACP5)) + geom_boxplot()
+p1 <- p1 + labs(x ="Neuropsychiatric Severity", y = expression(paste(italic("ACP5"), " count"))) +
+theme_bw(base_size = 40, ) + ggtitle(expression(italic("ACP5"))) +
+theme(plot.title = element_text(face="italic"))
+
+
+p2 <-  ggplot(jsle_combned, aes(x=factor(Neuropsychiatric2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), RASGRP3)) + geom_boxplot()
+p2 <- p2 + labs(x ="Neuropsychiatric Severity", y = expression(paste(italic("RASGRP3"), " count"))) +
+theme_bw(base_size = 40, ) + ggtitle(expression(italic("RASGRP3"))) +
+theme(plot.title = element_text(face="italic"))
+
+
+p3 <-  ggplot(jsle_combned, aes(x=factor(Neuropsychiatric2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), RNASEH2A)) + geom_boxplot()
+p3 <- p3 + labs(x ="Neuropsychiatric Severity", y = expression(paste(italic("RNASEH2A"), " count"))) +
+theme_bw(base_size = 40, ) + ggtitle(expression(italic("RNASEH2A"))) +
+theme(plot.title = element_text(face="italic"))
+
+
+p4 <-  ggplot(jsle_combned, aes(x=factor(Neuropsychiatric2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), TYK2)) + geom_boxplot()
+p4 <- p4 + labs(x ="Neuropsychiatric Severity", y = expression(paste(italic("TYK2"), " count"))) +
+theme_bw(base_size = 40, ) + ggtitle(expression(italic("TYK2"))) +
+theme(plot.title = element_text(face="italic"))
+
+
+
+plot <- plot_grid(p1,p2,p3,p4, ncol = 2)
+plot
+
+
+p1 <-  ggplot(jsle_combned, aes(x=factor(Renal2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), ACP5)) + geom_boxplot()
+p1 <- p1 + labs(x ="Renal Severity", y = "ACP5 count") +
+theme_bw(base_size = 20, ) + ggtitle("ACP5") +
+theme(plot.title = element_text(face="italic"))
+p1
+p2 <-  ggplot(jsle_combned, aes(x=factor(Renal2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), ITGAM)) + geom_boxplot()
+p2 <- p2 + labs(x ="Renal Severity", y = "ITGAM count") +
+theme_bw(base_size = 20, ) + ggtitle("ITGAM") +
+theme(plot.title = element_text(face="italic"))
+p2
+p3 <- p3 + labs(x ="Renal Severity", y = "LYN count") +
+theme_bw(base_size = 20, ) + ggtitle("LYN") +
+theme(plot.title = element_text(face="italic"))
+p3
+p4 <-  ggplot(jsle_combned, aes(x=factor(Renal2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), TNFAIP3)) + geom_boxplot()
+p4 <- p4 + labs(x ="Renal Severity", y = "TNFAIP3 count") +
+theme_bw(base_size = 20, ) + ggtitle("TNFAIP3") +
+theme(plot.title = element_text(face="italic"))
+p4
+plot2 <- plot_grid(p1,p2,p3,p4, ncol = 2, labels = "auto", label_size = 30)
+
+
+plot_3 <-  plot_grid(plot, plot2, ncol = 2, labels = "AUTO", label_size = 30)
+
+plot_3
+plot_3 <-  plot_grid(plot, plot2, ncol = 1, labels = "AUTO", label_size = 30)
+plot_3
+
+
+
+```
+
+
+
+#figure 6
+
+```{r}
+
+#jsle_combned <- jsle_combned %>%
+  #mutate(Treament_Group = ifelse(Treament_Group == "Aggressive", "Intensive", "Non-intensive"))
+
+
+#AAC_freq_filter.na <- AAC_freq_filter.na %>%
+  #mutate(Treament_Group = ifelse(Treament_Group == "Aggressive", "Intensive", "Non-intensive"))
+
+
+p11 <-  ggplot(jsle_combned, aes(x=factor(Treament_Group), ACP5)) + geom_boxplot()
+p11 <- p11 + labs(x ="Treatment Group", y = expression(paste(italic("ACP5"), " count"))) +
+theme_bw(base_size = 50, ) + ggtitle(expression(italic("ACP5"))) +
+theme(plot.title = element_text(face="italic"))
+
+
+p12 <-  ggplot(jsle_combned, aes(x=factor(Treament_Group), ITGAM)) + geom_boxplot()
+p12 <- p12 + labs(x ="Treatment Group", y = expression(paste(italic("LYN"), " count"))) +
+theme_bw(base_size = 50, ) + ggtitle(expression(italic("LYN"))) +
+theme(plot.title = element_text(face="italic"))
+
+
+p13 <-  ggplot(jsle_combned, aes(x=factor(Treament_Group), PXK)) + geom_boxplot()
+p13 <- p13 + labs(x ="Treatment Group", y = expression(paste(italic("PXK"), " count"))) +
+theme_bw(base_size = 50, ) + ggtitle(expression(italic("PXK"))) +
+theme(plot.title = element_text(face="italic"))
+
+
+p14 <-  ggplot(jsle_combned, aes(x=factor(Treament_Group), RNASEH2A)) + geom_boxplot()
+p14 <- p14 + labs(x ="Treatment Group", y = expression(paste(italic("RNASEH2A"), " count"))) +
+theme_bw(base_size = 50, ) + ggtitle(expression(italic("RNASH2A"))) +
+theme(plot.title = element_text(face="italic"))
+
+
+
+plot <- plot_grid(p11,p12,p13,p14, ncol = 2)
+
+
+
+p1 <-  ggplot(AAC_freq_filter.na, aes(Treament_Group, sum)) + geom_boxplot()
+p1 <- p1 + theme_bw(base_size = 60) + labs(x ="Treatment Group", y = "Alternative Allele Count") + theme(text = element_text(size = 50))+ scale_x_discrete(labels = function(x) str_wrap(x, width = 5))
+
+p2 <-  ggplot(AAC_freq_filter.na, aes(factor(Ethnicity_def, levels = ethnicity_order), sum)) + geom_boxplot(aes(fill=Treament_Group))
+p2 <- p2 +
+theme_bw(base_size = 60) +
+labs(x = "Ethnicity", y = "Alternative Allele Count", colour = "Treatment Group") +
+theme(text = element_text(size = 50),
+legend.position = "bottom",  legend.direction = "vertical") +scale_x_discrete(labels = function(x) str_wrap(x, width = 2))
+
+top_row <- plot_grid(p1,p2, ncol=2, labels="AUTO", label_size = 70, align = "h", axis="bt")
+
+
+plot2 <- plot_grid(top_row, plot, labels=c("", "C"), label_size = 70, ncol = 1,  align = "h", axis="lr")
+
+
+```
+
+
+
+## Supplementary figures
+
+
+#figure1
+
+```{r}
+library(ggpubr)
+
+
+p1 <- ggscatter(AAC_freq_filter.na, x = "SLEDAI_highest", y = "sum",
+add = "reg.line", conf.int = TRUE,
+cor.coef = TRUE, cor.method = "pearson",cor.coef.size = 10,
+xlab = "Highest SLEDAI score", ylab = "Alternative Allele Count") +
+theme_classic(base_size = 30)
+
+
+p2 <- ggscatter(AAC_freq_filter.na, x = "BILAG_highest", y = "sum",
+add = "reg.line", conf.int = TRUE,
+cor.coef = TRUE, cor.method = "pearson",cor.coef.size = 10,
+xlab = "Highest p_BILAG score", ylab = "Alternative Allele Count")  +
+theme_classic(base_size = 30)
+
+
+p3 <- ggscatter(AAC_freq_filter.na, x = "SLICC_last", y = "sum",
+add = "reg.line", conf.int = TRUE,
+cor.coef = TRUE, cor.method = "pearson",cor.coef.size = 10,
+xlab = "SLICC/ACR Damage Index", ylab = "Alternative Allele Count") +
+theme_classic(base_size = 30)
+
+
+plot <- plot_grid(p1,p2,p3, ncol =1, labels="AUTO", label_size = 50)
+
+
+```
+
+
+
+#figure2
+```{r}
+p1 <-  ggplot(jsle_combned, aes(x=factor(Haematological2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), ACP5)) + geom_boxplot()
+p1 <- p1 + labs(x = "", y = expression(paste(italic("ACP5"), " count"))) +
+theme_bw(base_size = 60, ) +
+theme(plot.title = element_text(face="italic"), axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5))
+
+p2 <-  ggplot(jsle_combned, aes(x=factor(Haematological2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), DNASE1)) + geom_boxplot()
+p2 <- p2 + labs(x = "", y = expression(paste(italic("DNASE1"), " count"))) +
+theme_bw(base_size = 60, ) +
+theme(plot.title = element_text(face="italic"), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=0.5))
+
+p3 <-  ggplot(jsle_combned, aes(x=factor(Haematological2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), RNASEH2A)) + geom_boxplot()
+p3 <- p3 + labs(x = "", y = expression(paste(italic("RNASEH2A"), " count"))) +
+theme_bw(base_size = 60 ) +
+theme(plot.title = element_text(face="italic"), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=0.5))
+
+p4 <-  ggplot(jsle_combned, aes(x=factor(Haematological2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), UBE2L3)) + geom_boxplot()
+p4 <- p4 + labs(x = "", y = expression(paste(italic("UBE2L3"), " count"))) +
+theme_bw(base_size = 60, ) +
+theme(plot.title = element_text(face="italic"), axis.text.x = element_text(angle = 90, vjust = 12, hjust=0.5))
+
+
+plot<-plot_grid(p1, p2,p3,p4, ncol=4, align='vh', vjust=1, scale = 1)
+plot <- ggdraw(add_sub(plot, "Haematological severity", vpadding=grid::unit(0,"lines"),y=6, x=0.5, vjust=-22, size = 50,  fontface = "bold"))
+
+
+p1 <-  ggplot(jsle_combned, aes(x=factor(Cardiorespiratory2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), IRF8)) + geom_boxplot()
+p1 <- p1 + labs(x = "", y = expression(paste(italic("IRF8"), " count"))) +
+theme_bw(base_size = 60, ) +
+theme(plot.title = element_text(face="italic"), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=0.5))
+
+p2 <-  ggplot(jsle_combned, aes(x=factor(Cardiorespiratory2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), ITGAM)) + geom_boxplot()
+p2 <- p2 + labs(x = "", y = expression(paste(italic("ITGAM"), " count"))) +
+theme_bw(base_size = 60, ) +
+theme(plot.title = element_text(face="italic"), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=0.5))
+
+p3 <-  ggplot(jsle_combned, aes(x=factor(Cardiorespiratory2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), UBE2L3)) + geom_boxplot()
+p3 <- p3 + labs(x = "", y = expression(paste(italic("UBE2L3"), " count"))) +
+theme_bw(base_size = 60, ) +
+theme(plot.title = element_text(face="italic"), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=0.5))
+
+
+plot2<-plot_grid(p1, p2,p3, ncol=3, align='vh', vjust=1, scale = 1)
+plot2 <- ggdraw(add_sub(plot2, "Cardiorespiratory severity", vpadding=grid::unit(0,"lines"),y=6, x=0.5, vjust=-22, size = 50, fontface = "bold"))
+
+
+
+p1 <-  ggplot(jsle_combned, aes(x=factor(Gastrointestinal2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), ITGAM)) + geom_boxplot()
+p1 <- p1 + labs(x = "", y = expression(paste(italic("ITGAM"), " count"))) +
+theme_bw(base_size = 60, ) +
+theme(plot.title = element_text(face="italic"), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=0.5))
+
+p2 <-  ggplot(jsle_combned, aes(x=factor(Gastrointestinal2004_severity, level=c('Never', 'Mild', 'Moderate', 'Severe')), PXK)) + geom_boxplot()
+p2 <- p2 + labs(x = "", y = expression(paste(italic("PXK"), " count"))) +
+theme_bw(base_size = 60, ) +
+theme(plot.title = element_text(face="italic"), axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=0.5))
+
+plot3<-plot_grid(p1,p2, ncol=2, align='vh', vjust=1, scale = 1)
+plot3 <- ggdraw(add_sub(plot3, "Gastrointestinal severity", vpadding=grid::unit(0,"lines"),y=6, x= 0.5, vjust=-22, size = 50, fontface = "bold"))
+
+
+plot_fin <- plot_grid(plot,plot2,plot3, ncol=1, labels="AUTO", label_size = 80)
+plot_fin
+
+```
+

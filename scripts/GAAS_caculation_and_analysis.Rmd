@@ -1,0 +1,269 @@
+---
+title: "Gene level counts"
+author: "Megan Hasoon"
+
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Script for doing analysis of gene level counts
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(here)
+```
+## calculate gene level scores
+
+```{r}
+all_data_vcf <- vcfR::read.vcfR("../jSLE/data/riskfactor.vcf", convertNA = T)
+
+vcf_new <- readVcf("../jSLE/data/riskfactor.vcf")
+geno_vcf <- as.data.frame(geno(vcf_new)$GT)
+geno_vcf_mat <- as.data.frame(t(geno_vcf))
+geno_vcf_mat$ID <- rownames(geno_vcf_mat)
+
+
+geno_vcf_mat[geno_vcf_mat == "1|0"] <- "1/0"
+geno_vcf_mat[geno_vcf_mat == "0|1"] <- "0/1"
+geno_vcf_mat[geno_vcf_mat == "0|0"] <- "0/0"
+geno_vcf_mat[geno_vcf_mat == "1|1"] <- "1/1"
+geno_vcf_mat[geno_vcf_mat == "./."] <- NA
+
+#remove NAs
+#3765 SNPS
+
+t_geno <- as.data.frame(t(geno_vcf_mat))
+geno_vcf_mat.na <- na.omit(t_geno)
+
+
+## get "info" from vcf file - need the the annotation value and rsID
+all_vcf_info <- vcfR::extract.info(all_data_vcf, element = "ANN")
+
+vcf_info_rs <- vcfR::extract.info(all_data_vcf, element = "RS")
+# make into dataframe and tidy
+all_vcf_info <- as.data.frame(all_vcf_info)
+
+
+rownames(all_vcf_info) <- colnames(risk_counts[1:4100])
+# split info by delimiter
+all_vcf_info_split <- data.frame(str_split(all_vcf_info$all_data_info, "\\|", simplify=TRUE))
+View(all_data_info_split)
+
+# keep annotation and gene name info and annotation SNP info
+all_data_info_split <- subset(all_data_info_split, select = c(X3, X4))
+colnames(all_data_info_split) <- c("ANN", "gene")
+View(all_data_info_split)
+
+# add SNP name to info
+all_data_info_split$SNP <- colnames(risk_counts[1:4100])
+View(all_data_info_split)
+
+
+#add column for value based on annotation
+all_data_info_split <- add_column(all_data_info_split,ANN_value= "na", .after = "ANN")
+all_data_info_split$ANN_value <- ifelse(all_data_info_split$ANN == "LOW", "1",
+                                        ifelse(all_data_info_split$ANN == "MODERATE", "2",
+                                               ifelse(all_data_info_split$ANN == "HIGH", "3",
+                                                      ifelse(all_data_info_split$ANN == "MODIFIER", "1",
+                                                             "No"))))
+
+
+# change the allele annotation to number based on number of alt alleles
+
+geno_vcf_mat.na$SNP <- rownames(geno_vcf_mat.na)
+
+#join geno and annotation info
+combined_info_allele <- left_join(all_data_info_split, geno_vcf_mat.na, join_by("SNP" == "SNP"))
+
+# change alleles to counts
+combined_info_allele[combined_info_allele  == "0/0"] <- "0"
+combined_info_allele[combined_info_allele  == "1/0"] <- "1"
+combined_info_allele[combined_info_allele  == "0/1"] <- "1"
+combined_info_allele[combined_info_allele  == "1/1"] <- "2"
+
+## na.omit
+combined_info_allele_na <- na.omit(combined_info_allele)
+
+## convert to numeric
+combined_info_allele_na2 <- combined_info_allele_na
+combined_info_allele_na2[sapply(combined_info_allele_na2[,5:333], is.character)] <- lapply(combined_info_allele_na2[sapply(combined_info_allele_na2, is.character)], 
+                                                                                           as.numeric)
+##re-add in ANN, gene and SNP infor
+combined_info_allele_na2$ANN <- combined_info_allele_na$ANN
+combined_info_allele_na2$gene <- combined_info_allele_na$gene
+combined_info_allele_na2$SNP <- combined_info_allele_na$SNP
+
+
+
+
+# multiply allele count by ann value
+jsle_data_final <- combined_info_allele_na2
+
+for(i in colnames(combined_info_allele_na2[5:333])){
+  print(i)
+  jsle_data_final[, i] <- mapply(FUN = "*",
+                                 combined_info_allele_na3[[i]],
+                                 combined_info_allele_na3[["ANN_value"]])
+  
+}
+
+##group by gene
+
+jsle_score_list <- list()
+for (i in colnames(jsle_data_final[5:333])){
+  print(i)
+  jsle_score_list[[i]] <- jsle_data_final %>% group_by(gene) %>% 
+    summarise(sum_=sum(get(i)),
+              .groups = 'drop')
+}
+
+# map back to df giving score for each gene per sample
+jsle_all_snp_scores <- map(jsle_score_list, ~ select(as.data.frame(.x), gene, sum_)) %>%
+  enframe %>%
+  unnest(value,keep_empty = TRUE)
+
+
+#pivot scores by sample
+pivot_jsle_all_snp_scores <- jsle_all_snp_scores %>%
+  pivot_wider(names_from = "name", values_from = "sum_")
+
+
+```
+
+
+
+## Load data
+
+
+```{r}
+
+raw_scores <- as.data.frame(pivot_jsle_all_snp_scores)
+rownames(raw_scores) <- raw_scores$gene
+raw_scores <- raw_scores[,-1]
+
+# read in metadata
+
+demos <- read.csv("../../jSLE/data/JSLE_combined_meta_treatment_updated24_.csv")
+demos$Patient_ID <- as.character(demos$Patient_ID)
+demos_ex <- demos %>% filter(Tag == "include")
+
+
+
+raw_scores_t <- as.data.frame(t(raw_scores))
+
+PCA_matrix <- prcomp(raw_scores_t)
+d1 <- PCA_matrix$x %>% data.frame %>% rownames_to_column("Patient_ID")
+d1 <- left_join(d1, demos_ex, by="Patient_ID")
+
+d1 <- na.omit(d1)
+
+percentVar <- round((PCA_matrix$sdev)^2 / sum(PCA_matrix$sdev^2)*100, 2)
+
+
+p1 <- ggplot(d1, aes(PC1, PC2, colour = Ethnicity_def, id = Patient_ID, label = Patient_ID)) +
+  geom_point(size = 3 ) +
+ #geom_text(size = 3, position = position_nudge(x = 1.7)) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) +
+  theme_bw() +
+  theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=16,face="bold"),
+        legend.title = element_text(size=16), 
+        legend.text = element_text(size =16)) 
+
+p1 <- p1 + labs(colour = "Ethnicity")
+
+  
+
+p1
+#ggsave(here("figures/gene_level_PCA_not_corrected_all_eth.png"), p1, width = 9, height = 7)
+
+#empty_df_na$ID <- rownames(empty_df_na)
+
+
+#combine meta
+
+demos <- read.csv(here("data/JSLE_combined_meta_treatment_updated24_.csv"), na.strings=c("","NA"))
+demos$Patient_ID <- as.character(demos$Patient_ID)
+demos <- demos %>% filter(Tag == "include")
+
+
+raw_scores_t <- raw_scores_t %>% rownames_to_column("ID")
+
+
+jsle_combned <- left_join(raw_scores_t, demos, join_by("ID" == "Patient_ID"))
+#jsle_combned <- combined
+
+
+```
+
+
+## Run GLM
+```{r}
+
+jsle_combned <- na.omit(jsle_combned)
+rownames(jsle_combned) <- jsle_combned$ID
+jsle_combned <- jsle_combned[,-1]
+
+
+#62 genes to test
+genes <- colnames(jsle_combned[3:89])
+
+genes <- genes[! genes %in% c("AP4B1-AS1","AL022067.1","RP1-134E15.3","RP11-1007G5.2", "RP11-148O21.2", "RP11-148O21.3", "RP11-148O21.4","RP11-21K12.2",  "RP11-356I2.4",  "RP11-399O19.9", "RP11-802O23.3", "RP5-1073O3.2","ZNF627", "ZBTB12", "TLDC2", "TECRP1", "SLX4", "RNA5SP29", "AP4B1", "C4orf36", "CEBPG", "CFB", "GPR108","IL21-AS1", "MIR4513", "PRDX2")]
+
+
+##21 variables
+vars_to_test  <- colnames(demos[4:ncol(demos)])
+vars_to_test <- vars_to_test[! vars_to_test %in% c("Gender", "Ethnicity_def", "FamilyHistoryAutoimmuneDiseases", "SLEDAI_first","SLICC_last", "Flare_per_year", "SLEDAI_highest","BILAG_first", "FU_more_1y", "LSLICCTotal", "BILAG_highest", "Flare_count_AnySEVERity")]
+
+
+
+
+## run glm testing genes against clinical variables 
+## fdr multiple test correction 
+anovaList <- list()
+
+for (gene in genes){
+  for (clinvar in vars_to_test){
+    print(gene) 
+  print(clinvar)
+  model <- glm(get(gene) ~ get(clinvar) + Ethnicity_def + Gender + FamilyHistoryAutoimmuneDiseases, family="poisson", data=jsle_combned)
+  anova <- anova(model, test="Chi")
+  anovaList[clinvar] <- anova$`Pr(>Chi)`[2]
+  
+  }
+  pvals_gene_score <- do.call("rbind", anovaList)
+  pvals_gene_score <- as.data.frame(pvals_gene_score )
+  adjust <- p.adjust(pvals_gene_score$V1, method = "fdr", n=1302) #fdr correction
+  pvals_gene_score$adjust <- adjust
+  pvals_gene_score <- pvals_gene_score %>% 
+  filter(pvals_gene_score$adjust <= 0.05) #filter everything not above 0.05, remove to keep all results
+  colnames(pvals_gene_score) <- c(paste("pval", gene, sep="_"), paste("padj", gene, sep="_")) # set colnames
+  
+  assign(paste("pvals", gene, sep = "_"), pvals_gene_score) # rename dataframe
+}
+
+
+#combine results to df
+results_df <- data.frame()
+results_df <- data.frame(variable = list(vars_to_test))
+colnames(results_df) <- c("variable")
+
+for(gene in genes){
+  # Get the data frame for the current gene
+  
+  current_df <- get(paste("pvals", gene, sep="_"))
+  current_df <- current_df %>% rownames_to_column("variable")
+
+  # Append the current dataframe to the result dataframe
+  results_df <- left_join(results_df, current_df, by ="variable")
+  
+  
+}
+
+```
+
