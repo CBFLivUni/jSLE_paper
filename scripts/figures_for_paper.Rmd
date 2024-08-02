@@ -27,6 +27,10 @@ GAAS_ <- read.csv()
 demos <- read.csv(here("data/JSLE_metadata_updated24_.csv"), na.strings=c("","NA"))
 demos$Patient_ID <- as.character(demos$Patient_ID)
   
+
+
+ethnicity_order <- c("Black African/Caribbean", "Caucasian", "East Asian", "South Asian", "Any other Asian Background")
+
 ```
 
 
@@ -143,8 +147,6 @@ plot
 #Figure 3
 
 ```{r}
-
-ethnicity_order <- c("Black African/Caribbean", "Caucasian", "East Asian", "South Asian", "Any other Asian Background")
 
 p1 <-  ggplot(AAC_freq_filter.na, aes(factor(Ethnicity_def, levels = ethnicity_order), sum)) + geom_boxplot(aes(fill=Gender))
 p1 <- p1 + theme_bw(base_size = 40) + labs(x ="Ethnicity", y = "Alternative Allele Count" , colour = "Sex") + theme() +
