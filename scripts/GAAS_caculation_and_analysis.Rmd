@@ -19,7 +19,7 @@ library(here)
 ## calculate gene level scores
 
 ```{r}
-all_data_vcf <- vcfR::read.vcfR(here("data/riskfactor.vcf", convertNA = T))
+all_data_vcf <- vcfR::read.vcfR(here("data/riskfactor.vcf"), convertNA = T)
 
 vcf_new <- readVcf(here("jSLE/data/riskfactor.vcf"))
 geno_vcf <- as.data.frame(geno(vcf_new)$GT)

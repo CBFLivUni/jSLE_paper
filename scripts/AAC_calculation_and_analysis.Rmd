@@ -23,7 +23,7 @@ library(here)
 
 #read in vcf file
 
-all_data_vcf <- vcfR::read.vcfR(here("data/riskfactor.vcf", convertNA = T))
+all_data_vcf <- vcfR::read.vcfR(here("data/riskfactor.vcf"), convertNA = T)
 
 vcf_new <- readVcf(here("data/riskfactor.vcf"))
 geno_vcf <- as.data.frame(geno(vcf_new)$GT)
@@ -58,19 +58,19 @@ vcf_info_rs <- vcfR::extract.info(all_data_vcf, element = "RS")
 all_vcf_info <- as.data.frame(all_vcf_info)
 
 
-rownames(all_vcf_info) <- colnames(risk_counts[1:4100])
+rownames(all_vcf_info) <- colnames(geno_vcf_mat[1:4100])
 # split info by delimiter
-all_vcf_info_split <- data.frame(str_split(all_vcf_info$all_data_info, "\\|", simplify=TRUE))
-View(all_data_info_split)
+all_vcf_info_split <- data.frame(str_split(all_vcf_info$all_vcf_info, "\\|", simplify=TRUE))
+View(all_vcf_info_split)
 
 # keep annotation and gene name info and annotation SNP info
-all_data_info_split <- subset(all_data_info_split, select = c(X3, X4))
-colnames(all_data_info_split) <- c("ANN", "gene")
-View(all_data_info_split)
+all_vcf_info_split <- subset(all_vcf_info_split, select = c(X3, X4))
+colnames(all_vcf_info_split) <- c("ANN", "gene")
+View(all_vcf_info_split)
 
 # add SNP name to info
-all_data_info_split$SNP <- colnames(risk_counts[1:4100])
-View(all_data_info_split)
+all_vcf_info_split$SNP <- colnames(geno_vcf_mat[1:4100])
+View(all_vcf_info_split)
 
 
 ```
@@ -78,11 +78,11 @@ View(all_data_info_split)
 ```{r}
 
 #add column for value based on annotation
-all_data_info_split <- add_column(all_data_info_split,ANN_value= "na", .after = "ANN")
-all_data_info_split$ANN_value <- ifelse(all_data_info_split$ANN == "LOW", "1",
-ifelse(all_data_info_split$ANN == "MODERATE", "2",
-ifelse(all_data_info_split$ANN == "HIGH", "3",
-ifelse(all_data_info_split$ANN == "MODIFIER", "1",
+all_vcf_info_split <- add_column(all_vcf_info_split,ANN_value= "na", .after = "ANN")
+all_vcf_info_split$ANN_value <- ifelse(all_vcf_info_split$ANN == "LOW", "1",
+ifelse(all_vcf_info_split$ANN == "MODERATE", "2",
+ifelse(all_vcf_info_split$ANN == "HIGH", "3",
+ifelse(all_vcf_info_split$ANN == "MODIFIER", "1",
 "No"))))
 ```
 
@@ -106,7 +106,7 @@ geno_vcf_mat_filter_t$SNP <- rownames(geno_vcf_mat_filter_t)
 
 ```{r}
 #combine allele info with matrix
-combine_info <- left_join(geno_vcf_mat_filter_t, all_data_info_split, by="SNP")
+combine_info <- left_join(geno_vcf_mat_filter_t, all_vcf_info_split, by="SNP")
 View(combine_info)
 ```
 
@@ -119,7 +119,7 @@ multiply_matrix <- combine_info
 
 str(multiply_matrix)
 
-for(i in colnames(combine_info[1:269])){
+for(i in colnames(combine_info[1:329])){
 print(i)
 multiply_matrix[, i] <- mapply(FUN = "*",
 combine_info[[i]],
@@ -133,7 +133,7 @@ multiply_matrix_t <- as.data.frame(t(multiply_matrix))
 
 
 multiply_matrix_t <- multiply_matrix_t[,-4101]
-multiply_matrix_t <- multiply_matrix_t[-270:-273,]
+multiply_matrix_t <- multiply_matrix_t[-330:-333,]
 
 
 #rowSums to get alt allele count, weighted by ANN, acrosss each patient
@@ -155,7 +155,7 @@ View(minors_weighted)
 
 #read in meta data
 
-demos <- read.csv(here("/data/JSLE_combined_meta_treatment_updated24_.csv"), na.strings=c("","NA"))
+demos <- read.csv(here("data/JSLE_combined_meta_treatment_updated24_.csv"), na.strings=c("","NA"))
 demos$Patient_ID <- as.character(demos$Patient_ID)
 
 ```
@@ -236,8 +236,20 @@ lsmeans(model, pairwise ~ Treament_Group|Ethnicity_def, adjust = "tukey")
 ```
 
 
-#correlation - aac vs diganosis age within ethnicity groups
+#correlations
 ```{r}
+
+correlation <- cor.test(AAC_freq_filter.na$sum, AAC_freq_filter.na$Diagnosis_Age, method = "pearson")
+correlation <- cor.test(AAC_freq_filter.na$sum, AAC_freq_filter.na$BILAG_highest, method = "pearson")
+correlation <- cor.test(AAC_freq_filter.na$sum, AAC_freq_filter.na$SLEDAI_highest, method = "pearson")
+correlation <- cor.test(AAC_freq_filter.na$sum, AAC_freq_filter.na$SLICC_last, method = "pearson")
+
+#adust pvalues using fdr
+adjust <- p.adjust(correlation$p.value, n=4, method = "fdr")
+
+
+
+##aac vs diganosis age within ethnicity groups
 
 # Get unique ethnicity values
 ethnicities <- unique(AAC_freq_filter.na$Ethnicity_def)
