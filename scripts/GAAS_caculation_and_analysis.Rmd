@@ -19,9 +19,9 @@ library(here)
 ## calculate gene level scores
 
 ```{r}
-all_data_vcf <- vcfR::read.vcfR("../jSLE/data/riskfactor.vcf", convertNA = T)
+all_data_vcf <- vcfR::read.vcfR(here("data/riskfactor.vcf", convertNA = T))
 
-vcf_new <- readVcf("../jSLE/data/riskfactor.vcf")
+vcf_new <- readVcf(here("jSLE/data/riskfactor.vcf"))
 geno_vcf <- as.data.frame(geno(vcf_new)$GT)
 geno_vcf_mat <- as.data.frame(t(geno_vcf))
 geno_vcf_mat$ID <- rownames(geno_vcf_mat)
@@ -48,27 +48,27 @@ vcf_info_rs <- vcfR::extract.info(all_data_vcf, element = "RS")
 all_vcf_info <- as.data.frame(all_vcf_info)
 
 
-rownames(all_vcf_info) <- colnames(risk_counts[1:4100])
+rownames(all_vcf_info) <- colnames(geno_vcf_mat[1:4100])
 # split info by delimiter
-all_vcf_info_split <- data.frame(str_split(all_vcf_info$all_data_info, "\\|", simplify=TRUE))
-View(all_data_info_split)
+all_vcf_info_split <- data.frame(str_split(all_vcf_info$all_vcf_info, "\\|", simplify=TRUE))
+View(all_vcf_info_split)
 
 # keep annotation and gene name info and annotation SNP info
-all_data_info_split <- subset(all_data_info_split, select = c(X3, X4))
-colnames(all_data_info_split) <- c("ANN", "gene")
-View(all_data_info_split)
+all_vcf_info_split <- subset(all_vcf_info_split, select = c(X3, X4))
+colnames(all_vcf_info_split) <- c("ANN", "gene")
+View(all_vcf_info_split)
 
 # add SNP name to info
-all_data_info_split$SNP <- colnames(risk_counts[1:4100])
-View(all_data_info_split)
+all_vcf_info_split$SNP <- colnames(geno_vcf_mat[1:4100])
+View(all_vcf_info_split)
 
 
 #add column for value based on annotation
-all_data_info_split <- add_column(all_data_info_split,ANN_value= "na", .after = "ANN")
-all_data_info_split$ANN_value <- ifelse(all_data_info_split$ANN == "LOW", "1",
-                                        ifelse(all_data_info_split$ANN == "MODERATE", "2",
-                                               ifelse(all_data_info_split$ANN == "HIGH", "3",
-                                                      ifelse(all_data_info_split$ANN == "MODIFIER", "1",
+all_vcf_info_split <- add_column(all_vcf_info_split,ANN_value= "na", .after = "ANN")
+all_vcf_info_split$ANN_value <- ifelse(all_vcf_info_split$ANN == "LOW", "1",
+                                        ifelse(all_vcf_info_split$ANN == "MODERATE", "2",
+                                               ifelse(all_vcf_info_split$ANN == "HIGH", "3",
+                                                      ifelse(all_vcf_info_split$ANN == "MODIFIER", "1",
                                                              "No"))))
 
 
@@ -77,7 +77,7 @@ all_data_info_split$ANN_value <- ifelse(all_data_info_split$ANN == "LOW", "1",
 geno_vcf_mat.na$SNP <- rownames(geno_vcf_mat.na)
 
 #join geno and annotation info
-combined_info_allele <- left_join(all_data_info_split, geno_vcf_mat.na, join_by("SNP" == "SNP"))
+combined_info_allele <- left_join(all_vcf_info_split, geno_vcf_mat.na, join_by("SNP" == "SNP"))
 
 # change alleles to counts
 combined_info_allele[combined_info_allele  == "0/0"] <- "0"
@@ -106,8 +106,8 @@ jsle_data_final <- combined_info_allele_na2
 for(i in colnames(combined_info_allele_na2[5:333])){
   print(i)
   jsle_data_final[, i] <- mapply(FUN = "*",
-                                 combined_info_allele_na3[[i]],
-                                 combined_info_allele_na3[["ANN_value"]])
+                                 combined_info_allele_na2[[i]],
+                                 combined_info_allele_na2[["ANN_value"]])
   
 }
 
@@ -147,7 +147,7 @@ raw_scores <- raw_scores[,-1]
 
 # read in metadata
 
-demos <- read.csv("../../jSLE/data/JSLE_combined_meta_treatment_updated24_.csv")
+demos <- read.csv(here("data/JSLE_combined_meta_treatment_updated24_.csv"))
 demos$Patient_ID <- as.character(demos$Patient_ID)
 demos_ex <- demos %>% filter(Tag == "include")
 
@@ -180,23 +180,11 @@ p1 <- p1 + labs(colour = "Ethnicity")
   
 
 p1
-#ggsave(here("figures/gene_level_PCA_not_corrected_all_eth.png"), p1, width = 9, height = 7)
-
-#empty_df_na$ID <- rownames(empty_df_na)
-
 
 #combine meta
-
-demos <- read.csv(here("data/JSLE_combined_meta_treatment_updated24_.csv"), na.strings=c("","NA"))
-demos$Patient_ID <- as.character(demos$Patient_ID)
-demos <- demos %>% filter(Tag == "include")
-
-
 raw_scores_t <- raw_scores_t %>% rownames_to_column("ID")
-
-
 jsle_combned <- left_join(raw_scores_t, demos, join_by("ID" == "Patient_ID"))
-#jsle_combned <- combined
+
 
 
 ```
@@ -225,19 +213,32 @@ vars_to_test <- vars_to_test[! vars_to_test %in% c("Gender", "Ethnicity_def", "F
 
 ## run glm testing genes against clinical variables 
 ## fdr multiple test correction 
-anovaList <- list()
 
-for (gene in genes){
+anovaList <- list()
+estimatesList <- list()
+
+for (gene in sig_genes){
   for (clinvar in vars_to_test){
     print(gene) 
   print(clinvar)
+    #clinvar2 <- gsub("2004_severity|EVER", "", clinvar)
+    #clinvar2 <- gsub("LQ05NonErosiveArthritis", "LQ5NEA", clinvar2)
+    #clinvar2 <- gsub("LQ03Photosensitivity", "LQ3Photo", clinvar2)
+    #clinvar2 <- gsub("LQ04OralNasalUlcers", "LQ4ONU", clinvar2)
+    #print(clinvar2)
+  
   model <- glm(get(gene) ~ get(clinvar) + Ethnicity_def + Gender + FamilyHistoryAutoimmuneDiseases, family="poisson", data=jsle_combned)
   anova <- anova(model, test="Chi")
   anovaList[clinvar] <- anova$`Pr(>Chi)`[2]
   
+  
+  # Extract the estimates and SE from model
+    estimates_ <- summary(model)$coefficients
+    # make dataframe and add to list
+  estimatesList[[paste(gene, clinvar2, sep = "_")]] <- as.data.frame(estimates_)
   }
   pvals_gene_score <- do.call("rbind", anovaList)
-  pvals_gene_score <- as.data.frame(pvals_gene_score )
+  pvals_gene_score <- as.data.frame(pvals_gene_score)
   adjust <- p.adjust(pvals_gene_score$V1, method = "fdr", n=1302) #fdr correction
   pvals_gene_score$adjust <- adjust
   pvals_gene_score <- pvals_gene_score %>% 
@@ -245,8 +246,8 @@ for (gene in genes){
   colnames(pvals_gene_score) <- c(paste("pval", gene, sep="_"), paste("padj", gene, sep="_")) # set colnames
   
   assign(paste("pvals", gene, sep = "_"), pvals_gene_score) # rename dataframe
+  
 }
-
 
 #combine results to df
 results_df <- data.frame()
@@ -265,5 +266,22 @@ for(gene in genes){
   
 }
 
+results_df_clean <- results_df %>% select(where(~!all(is.na(.))))
+
+#create workbook of estimate results
+wb <- createWorkbook()
+
+for (df_name in names(estimatesList)) {
+# Shorten the name by removing the "estimates_" prefix
+short_name <- sub("^estimates_", "", df_name)
+# Add a new worksheet using the shortened name
+addWorksheet(wb, sheetName = short_name)
+# Write the data frame to the corresponding sheet
+writeData(wb, sheet = short_name, estimatesList[[df_name]])
+}
+
+
 ```
+
+
 
