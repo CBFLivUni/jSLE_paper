@@ -217,15 +217,15 @@ vars_to_test <- vars_to_test[! vars_to_test %in% c("Gender", "Ethnicity_def", "F
 anovaList <- list()
 estimatesList <- list()
 
-for (gene in sig_genes){
+for (gene in genes){
   for (clinvar in vars_to_test){
     print(gene) 
   print(clinvar)
-    #clinvar2 <- gsub("2004_severity|EVER", "", clinvar)
-    #clinvar2 <- gsub("LQ05NonErosiveArthritis", "LQ5NEA", clinvar2)
-    #clinvar2 <- gsub("LQ03Photosensitivity", "LQ3Photo", clinvar2)
-    #clinvar2 <- gsub("LQ04OralNasalUlcers", "LQ4ONU", clinvar2)
-    #print(clinvar2)
+    clinvar2 <- gsub("2004_severity|EVER", "", clinvar)
+    clinvar2 <- gsub("LQ05NonErosiveArthritis", "LQ5NEA", clinvar2)
+    clinvar2 <- gsub("LQ03Photosensitivity", "LQ3Photo", clinvar2)
+    clinvar2 <- gsub("LQ04OralNasalUlcers", "LQ4ONU", clinvar2)
+    print(clinvar2)
   
   model <- glm(get(gene) ~ get(clinvar) + Ethnicity_def + Gender + FamilyHistoryAutoimmuneDiseases, family="poisson", data=jsle_combned)
   anova <- anova(model, test="Chi")
@@ -268,6 +268,7 @@ for(gene in genes){
 
 results_df_clean <- results_df %>% select(where(~!all(is.na(.))))
 
+library(openxlsx)
 #create workbook of estimate results
 wb <- createWorkbook()
 
@@ -277,8 +278,9 @@ short_name <- sub("^estimates_", "", df_name)
 # Add a new worksheet using the shortened name
 addWorksheet(wb, sheetName = short_name)
 # Write the data frame to the corresponding sheet
-writeData(wb, sheet = short_name, estimatesList[[df_name]])
+writeData(wb, sheet = short_name, estimatesList[[df_name]], rowNames = TRUE)
 }
+
 
 
 ```

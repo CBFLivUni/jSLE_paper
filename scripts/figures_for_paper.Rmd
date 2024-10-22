@@ -24,9 +24,7 @@ library(ggvenn)
 #read in data and clean
 
 AAC_freq_filter.na <- read.csv(here("data/AAC_freq_filter.na.csv"))
-GAAS_ <- read.csv(here("data/jsle_GAAS_with_metadata.csv"))
-rownames(GAAS_) <- GAAS_[,1]
-GAAS_ <- GAAS_[,-1]
+GAAS_ <- read.csv(here("data/jsle_GAAS_with_metadata.csv"), row.names = 1)
 
 demos <- read.csv(here("data/JSLE_combined_meta_treatment_updated24_.csv", na.strings=c("","NA")))
 demos$Patient_ID <- as.character(demos$Patient_ID)

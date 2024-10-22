@@ -195,12 +195,18 @@ vars_to_test <- vars_to_test[! vars_to_test %in% c("Gender", "Ethnicity_def", "F
 
 
 anovaList <- list()
+estimatesList <- list()
+
 
 for (i in vars_to_test){ 
   model <- glm(paste("sum ~", i, paste("+Ethnicity_def + Gender + FamilyHistoryAutoimmuneDiseases")), family = "poisson", data=AAC_freq_filter.na)
  anova <- anova(model, test="Chi")
   anovaList[i] <- anova$`Pr(>Chi)`[2]
-} 
+  estimates_ <- summary(model)$coefficients
+    # make dataframe and add to list
+  estimatesList[[i]] <- as.data.frame(estimates_)
+  }
+
 
 
 #convert to dataframe
@@ -209,6 +215,17 @@ AAC_pvalues <- as.data.frame(do.call("rbind", anovaList))
 #do fdr adjustment
 adjust <- p.adjust(AAC_pvalues$V1, method = "fdr", n=length(AAC_pvalues$V1))
 AAC_pvalues$adjusted_pval <- adjust
+
+
+
+wb <- createWorkbook()
+for (df_name in names(estimatesList)) {
+# Add a new worksheet using the shortened name
+addWorksheet(wb, sheetName = df_name)
+# Write the data frame to the corresponding sheet
+writeData(wb, sheet = df_name, estimatesList[[df_name]], rowNames = TRUE)
+}
+
 
 ```
 
