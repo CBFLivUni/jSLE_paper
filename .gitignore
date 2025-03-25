@@ -50,3 +50,6 @@ rsconnect/
 
 #data folder
 /data/*
+
+#figures
+/figures_mar25/*

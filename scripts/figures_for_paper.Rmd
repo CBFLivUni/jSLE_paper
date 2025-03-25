@@ -15,7 +15,7 @@ library(tidyverse)
 library(ggplot2)
 library(cowplot)
 library(ggvenn)
-
+library(here)
 ```
 
 
@@ -23,21 +23,24 @@ library(ggvenn)
 
 #read in data and clean
 
-AAC_freq_filter.na <- read.csv(here("data/AAC_freq_filter.na.csv"))
+AAC_freq_filter.na <- read.csv(here("data/AAC_freq_filter.na.csv"), row.names = 1)
 GAAS_ <- read.csv(here("data/jsle_GAAS_with_metadata.csv"), row.names = 1)
 
-demos <- read.csv(here("data/JSLE_combined_meta_treatment_updated24_.csv", na.strings=c("","NA")))
+demos <- read.csv(here("data/JSLE_combined_meta_treatment_updated24_.csv"), na.strings=c("","NA"))
 demos$Patient_ID <- as.character(demos$Patient_ID)
   demos <- demos %>%
-  mutate(Ethnicity_def = ifelse(Ethnicity_def == "Any other Asian Background", "Other Asian", Ethnicity_def))
+  mutate(Ethnicity_def = ifelse(Ethnicity_def == "Any other Asian Background", "Other Asian", Ethnicity_def)) %>% 
+    mutate(Ethnicity_def = ifelse(Ethnicity_def == "Black African/Caribbean", "African/Caribbean", Ethnicity_def))
   
 
-ethnicity_order <- c("Black African/Caribbean", "Caucasian", "East Asian", "South Asian", "Other Asian")
+ethnicity_order <- c("African/Caribbean", "Caucasian", "East Asian", "South Asian", "Other Asian")
 
 AAC_freq_filter.na <- AAC_freq_filter.na %>%
-  mutate(Ethnicity_def = ifelse(Ethnicity_def == "Any other Asian Background", "Other Asian", Ethnicity_def))
+  mutate(Ethnicity_def = ifelse(Ethnicity_def == "Any other Asian Background", "Other Asian", Ethnicity_def)) %>% 
+    mutate(Ethnicity_def = ifelse(Ethnicity_def == "Black African/Caribbean", "African/Caribbean", Ethnicity_def))
 GAAS_ <- GAAS_ %>%
-  mutate(Ethnicity_def = ifelse(Ethnicity_def == "Any other Asian Background", "Other Asian", Ethnicity_def))
+  mutate(Ethnicity_def = ifelse(Ethnicity_def == "Any other Asian Background", "Other Asian", Ethnicity_def)) %>% 
+    mutate(Ethnicity_def = ifelse(Ethnicity_def == "Black African/Caribbean", "African/Caribbean", Ethnicity_def))
 
 ```
 
@@ -87,9 +90,9 @@ p1
 
 p2 <- ggplot(demos_plots, aes(x =factor(Ethnicity_def, levels = ethnicity_order))) +
   geom_bar() +
-  labs(x = "Ethnicity", y="Number of patients") +
+  labs(x = "Ancestry", y="Number of patients") +
   theme_minimal() +
-  theme(text = element_text(size = 50))+ scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) +
+  theme(text = element_text(size = 50))+ scale_x_discrete(labels = function(x) str_wrap(x, width = 1)) +
   theme_bw(base_size = 50) 
 
 
@@ -99,7 +102,7 @@ plot1<-plot_grid(p1,p2, ncol=2, align='vh', vjust=1, scale = 1)
 plot1
 
 
-plot_fin <- plot_grid(venn, plot1, ncol=1, labels="AUTO", label_size = 90, scale = 0.9) + theme(plot.background = element_rect(fill = "white"))
+plot_fin <- plot_grid(venn, plot1, ncol=1, labels="AUTO", label_size = 90) + theme(plot.background = element_rect(fill = "white"))
 
 plot_fin
 
@@ -114,14 +117,15 @@ plot_fin
 library(ggpubr)
 p1 <- ggplot(AAC_freq_filter.na, aes(Diagnosis_Age, sum)) + geom_point(size=4) + geom_smooth(method='lm', formula= y~x, colour="black", size=3) +
   annotate("text", x=13.5, y=570, label= "R=-0.015, p=0.012", size=12 )
-p1 <- p1 + labs(x ="Diagnosis Age", y = "Alternative Allele Counts") + theme_bw(base_size = 40)
+p1 <- p1 + labs(x ="Diagnosis Age", y = "Alternate Allele Counts") + theme_bw(base_size = 40)
 
 p2 <- ggplot(AAC_freq_filter.na, aes(Diagnosis_Age, sum, group=factor(Ethnicity_def, levels = ethnicity_order), colour=factor(Ethnicity_def, levels = ethnicity_order))) + geom_point(size=4) + geom_smooth(method='lm', formula= y~x, size=3) 
-p2 <- p2 + labs(x ="Diagnosis Age", y = "Alternative Allele Counts" , colour = "Ethnicity") + theme_bw(base_size = 40)
+p2 <- p2 + labs(x ="Diagnosis Age", y = "Alternate Allele Counts" , colour = "Ancestry") + theme_bw(base_size = 40)
 
 
 plot <- plot_grid(p1,p2, ncol = 2, rel_widths = c(0.7, 1), labels = "AUTO", label_size = 50)
 plot
+
 
 
 ```
@@ -131,20 +135,27 @@ plot
 
 ```{r}
 
+AAC_freq_filter.na <- AAC_freq_filter.na %>%
+    mutate(Ethnicity_def = ifelse(Ethnicity_def == "African/Caribbean", "African/ Caribbean", Ethnicity_def))
+
+#ethnicity_order <- c("African/Caribbean", "Caucasian", "East Asian", "South Asian", "Other Asian")
+ethnicity_order <- c("African/ Caribbean", "Caucasian", "East Asian", "South Asian", "Other Asian")
+
+
 stat.test <- tibble::tribble(
   ~group1, ~group2,   ~p.adj, ~y.position,
-    "Black African/Caribbean",     "Caucasian", "***", 585,
-    "Black African/Caribbean",     "East Asian", "***",593,
-      "Black African/Caribbean",     "South Asian", "***",601,
-  "Black African/Caribbean",     "Other Asian", "***",609,
+    "African/ Caribbean",     "Caucasian", "***", 585,
+    "African/ Caribbean",     "East Asian", "***",593,
+      "African/ Caribbean",     "South Asian", "***",601,
+  "African/ Caribbean",     "Other Asian", "***",609,
   "Caucasian",     "East Asian", "***", 525,
     "Caucasian",     "South Asian", "***",534,
       "Caucasian",     "Other Asian", "***",543
   )
 
 p1 <-  ggplot(AAC_freq_filter.na, aes(factor(Ethnicity_def, levels = ethnicity_order), sum)) + geom_boxplot(aes(fill=Gender))
-p1 <- p1 + theme_bw(base_size = 40) + labs(x ="Ethnicity", y = "Alternative Allele Counts" , colour = "Sex") + theme() +
-scale_x_discrete(labels = function(x) str_wrap(x, width = 5)) + stat_pvalue_manual(
+p1 <- p1 + theme_bw(base_size = 60) + labs(x ="Ancestry", y = "Alternate Allele Counts" , colour = "Sex") + theme() +
+scale_x_discrete(labels = function(x) str_wrap(x, width = 3)) + stat_pvalue_manual(
     stat.test,
     label = "p.adj", size = 14
     )
@@ -155,22 +166,24 @@ p1
 ### preprocessing to get d1 in gene level analyses script
 
 d1 <- d1 %>%
- mutate(Ethnicity_def = ifelse(Ethnicity_def == "Any other Asian Background", "Other Asian", Ethnicity_def))
+# mutate(Ethnicity_def = ifelse(Ethnicity_def == "Any other Asian Background", "Other Asian", Ethnicity_def)) %>% 
+  mutate(Ethnicity_def = ifelse(Ethnicity_def == "African/Caribbean", "African/ Caribbean", Ethnicity_def))
 
-d1 <- na.omit(d1)
+#d1 <- na.omit(d1)
 #patient has no ethnicity data, but isn't being flagged as NA
+ethnicity_order <- c("African/ Caribbean", "Caucasian", "East Asian", "South Asian", "Other Asian")
 d1 <- d1[d1$Patient_ID != "15122", ]
 #d1 <- d1[-150,]
 p2 <- ggplot(d1, aes(PC1, PC2, colour = factor(Ethnicity_def, levels = ethnicity_order), id = Patient_ID, label = Patient_ID)) +
   geom_point(size = 7) +
   xlab(paste0("PC1: ",percentVar[1],"% variance")) +
   ylab(paste0("PC2: ",percentVar[2],"% variance")) +
-  theme_bw(base_size = 40) +
-  theme(axis.title=element_text(face="bold")) + stat_ellipse(data = d1[d1$Ethnicity_def == "Black African/Caribbean", ], 
+  theme_bw(base_size = 60) +
+  theme(axis.title=element_text(face="bold")) + stat_ellipse(data = d1[d1$Ethnicity_def == "African/ Caribbean", ], 
                aes(x = PC1, y = PC2, color = Ethnicity_def, group = Ethnicity_def), 
                level = 0.95) +
-  labs(colour = "Ethnicity")
-p2 <- p2 + labs(colour = "Ethnicity")
+  labs(colour = "Ancestry")
+p2 <- p2 + labs(colour = "Ancestry")
 
 p2
 
@@ -302,7 +315,7 @@ stat.test <- tibble::tribble(
 
 
 p1 <-  ggplot(AAC_freq_filter.na, aes(Treament_Group, sum)) + geom_boxplot()
-p1 <- p1 + theme_bw(base_size = 60) + labs(x ="Treatment Group", y = "Alternative Allele Counts") + theme(text = element_text(size = 50))+ scale_x_discrete(labels = function(x) str_wrap(x, width = 5)) + stat_pvalue_manual(
+p1 <- p1 + theme_bw(base_size = 60) + labs(x ="Treatment Group", y = "Alternate Allele Counts") + theme(text = element_text(size = 50))+ scale_x_discrete(labels = function(x) str_wrap(x, width = 5)) + stat_pvalue_manual(
     stat.test, 
     y.position = 610, step.increase = 0.075,
     label = "p.adj", size = 18
@@ -311,7 +324,7 @@ p1 <- p1 + theme_bw(base_size = 60) + labs(x ="Treatment Group", y = "Alternativ
 
 stat.test <- tibble::tribble(
   ~Ethnicity_def, ~group1, ~group2,   ~p.adj, ~y.position,
-  "Black African/Caribbean","Aggressive",     "Standard", "*", 584
+  "African/ Caribbean","Aggressive",     "Standard", "*", 584
   )
 
 
@@ -324,7 +337,7 @@ p2 <- ggplot(AAC_freq_filter.na, aes(x = factor(Ethnicity_def, levels = ethnicit
 
 p2 <- p2 +
 theme_bw(base_size = 60) +
-labs(x = "Ethnicity", y = "Alternative Allele Counts", colour = "Treatment Group", fill="Treatment Group") +
+labs(x = "Ancestry", y = "Alternate Allele Counts", colour = "Treatment Group", fill="Treatment Group") +
 theme(text = element_text(size = 50), 
 legend.position = "bottom",  legend.direction = "vertical") + scale_x_discrete(labels = function(x) str_wrap(x, width = 2))
 
@@ -439,6 +452,44 @@ plot3 <- ggdraw(add_sub(plot3, "Gastrointestinal severity", vpadding=grid::unit(
 
 plot_fin <- plot_grid(plot,plot2,plot3, ncol=1, labels="AUTO", label_size = 80)
 plot_fin
+
+```
+
+
+##supplementary fig3
+
+```{r}
+
+ethnicity_order <- c("African/Caribbean", "Caucasian", "East Asian", "South Asian", "Other Asian")
+
+p1 <- ggplot(AAC_freq_filter.na_pub, aes(sum.x, sum.y)) + geom_point() + geom_smooth(method="glm")+xlab("Original AAC") + ylab("Published AAC") +theme_bw(base_size = 20)
+
+
+p1 <- p1 + ggpubr::stat_cor(method="pearson", size=5)
+
+
+library(cowplot)
+plot_grid(p1,p2)
+
+
+p1 <- ggplot(AAC_freq_filter.na_pub, aes(Diagnosis_Age, sum.x)) + geom_point() + geom_smooth(method="glm") + xlab("Diagnosis Age ") + ylab("Original AAC") + theme_bw(base_size = 20)
+p2 <- ggplot(AAC_freq_filter.na_pub, aes(Diagnosis_Age, sum.y)) + geom_point() + geom_smooth(method="glm") + xlab("Diagnosis Age ") + ylab("Published AAC") + theme_bw(base_size = 20)
+
+
+plot_grid(p1,p2, labels = "AUTO", label_size = 30)
+
+
+AAC_freq_filter.na_pub$Ethnicity_def <- sub("Any other Asian Background", "Other Asian", AAC_freq_filter.na_pub$Ethnicity_def)
+
+AAC_freq_filter.na_pub$Ethnicity_def <- sub("Black African/Caribbean", "African/Caribbean", AAC_freq_filter.na_pub$Ethnicity_def)
+
+p1 <- ggplot(AAC_freq_filter.na_pub, aes(Diagnosis_Age, sum.x, colour = factor(Ethnicity_def, levels = ethnicity_order))) + geom_point() + geom_smooth(method="glm")  + xlab("Diagnosis Age ") + ylab("Alternate Allele Counts") + theme_bw(base_size = 25) + labs(colour = "Ancestry")
+
+p1
+p2 <- ggplot(AAC_freq_filter.na_pub, aes(Diagnosis_Age, sum.y, colour = factor(Ethnicity_def, levels = ethnicity_order))) + geom_point() + geom_smooth(method="glm") +  xlab("Diagnosis Age ") + ylab("Subset Alternate Allele Counts") + labs(colour = "Ancestry") + theme_bw(base_size = 25)
+
+p3 <- plot_grid(p1,p2, labels = "AUTO", label_size = 30)
+
 
 ```
 

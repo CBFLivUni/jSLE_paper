@@ -21,7 +21,7 @@ library(here)
 ```{r}
 all_data_vcf <- vcfR::read.vcfR(here("data/riskfactor.vcf"), convertNA = T)
 
-vcf_new <- readVcf(here("jSLE/data/riskfactor.vcf"))
+vcf_new <- readVcf(here("data/riskfactor.vcf"))
 geno_vcf <- as.data.frame(geno(vcf_new)$GT)
 geno_vcf_mat <- as.data.frame(t(geno_vcf))
 geno_vcf_mat$ID <- rownames(geno_vcf_mat)
@@ -200,7 +200,6 @@ jsle_combned <- jsle_combned[,-1]
 
 #62 genes to test
 genes <- colnames(jsle_combned[3:89])
-
 genes <- genes[! genes %in% c("AP4B1-AS1","AL022067.1","RP1-134E15.3","RP11-1007G5.2", "RP11-148O21.2", "RP11-148O21.3", "RP11-148O21.4","RP11-21K12.2",  "RP11-356I2.4",  "RP11-399O19.9", "RP11-802O23.3", "RP5-1073O3.2","ZNF627", "ZBTB12", "TLDC2", "TECRP1", "SLX4", "RNA5SP29", "AP4B1", "C4orf36", "CEBPG", "CFB", "GPR108","IL21-AS1", "MIR4513", "PRDX2")]
 
 

@@ -109,22 +109,31 @@ geno_vcf_mat_filter_t$SNP <- rownames(geno_vcf_mat_filter_t)
 #combine allele info with matrix
 combine_info <- left_join(geno_vcf_mat_filter_t, all_vcf_info_split, by="SNP")
 View(combine_info)
+combine_info$ANN_value <- as.numeric(combine_info$ANN_value)
 ```
 
+# just published risk snps
+```{r}
+
+pub_vars <- read.csv(here("data/variant_list.csv"))
+
+combine_info_pub <- combine_info %>% filter(SNP %in% pub_vars$published_snps)
+
+```
 
 ```{r}
 
 #multiple alterative allele value for each SNP by the ANN value
-combine_info$ANN_value <- as.numeric(combine_info$ANN_value)
+
 multiply_matrix <- combine_info
 
 str(multiply_matrix)
 
-for(i in colnames(combine_info[1:329])){
+for(i in colnames(combine_info_pub[1:329])){
 print(i)
 multiply_matrix[, i] <- mapply(FUN = "*",
-combine_info[[i]],
-combine_info[["ANN_value"]])
+combine_info_pub[[i]],
+combine_info_pub[["ANN_value"]])
 }
 
 #transpose
@@ -144,10 +153,47 @@ multiply_matrix_t$sum <- rowSums(multiply_matrix_t)
 multiply_matrix_t$Patient_ID <- rownames(multiply_matrix_t)
 
 minors_weighted <- multiply_matrix_t[,4101:4102]
+#minors_weighted <- multiply_matrix_t[,16:17]
 View(minors_weighted)
 
 ```
 
+#just published
+
+```{r}
+#multiple alterative allele value for each SNP by the ANN value
+
+multiply_matrix <- combine_info_pub
+
+str(multiply_matrix)
+
+for(i in colnames(combine_info_pub[1:329])){
+print(i)
+multiply_matrix[, i] <- mapply(FUN = "*",
+combine_info_pub[[i]],
+combine_info_pub[["ANN_value"]])
+}
+
+#transpose
+multiply_matrix_t <- as.data.frame(t(multiply_matrix))
+
+#remove bottom column with ID
+
+
+#multiply_matrix_t <- multiply_matrix_t[,-4101]
+multiply_matrix_t <- multiply_matrix_t[-330:-333,]
+
+
+#rowSums to get alt allele count, weighted by ANN, acrosss each patient
+
+multiply_matrix_t <- multiply_matrix_t %>% mutate_if(is.character, as.numeric)
+multiply_matrix_t$sum <- rowSums(multiply_matrix_t)
+multiply_matrix_t$Patient_ID <- rownames(multiply_matrix_t)
+
+#minors_weighted <- multiply_matrix_t[,4101:4102]
+minors_weighted_pub <- multiply_matrix_t[,16:17]
+View(minors_weighted_pub)
+```
 
 #analysis
 
@@ -156,11 +202,10 @@ View(minors_weighted)
 
 #read in meta data
 
-demos <- read.csv(here("data/JSLE_combined_meta_treatment_updated24_.csv"), na.strings=c("","NA"))
+demos <- read.csv(here("data/JSLE_combined_meta_treatment_updated24_.csv"), na.strings=c("-","NA"))
 demos$Patient_ID <- as.character(demos$Patient_ID)
 
 ```
-
 
 
 ```{r}
@@ -175,6 +220,9 @@ AAC_freq_filter <- AAC_freq %>% filter(Tag == "include")
 # 238 patients remain
 AAC_freq_filter.na <- na.omit(AAC_freq_filter)
 
+aac_patients <- AAC_freq_filter.na$Patient_ID
+
+AAC_freq_filter.na_pub <- left_join(AAC_freq_filter.na, minors_weighted_pub, by= "Patient_ID")
 
 ```
 
@@ -192,7 +240,7 @@ vars_to_test <- colnames(demos[4:ncol(demos)])
 
 #remove things we do not want to test
 #leaves 21 variables
-vars_to_test <- vars_to_test[! vars_to_test %in% c("Gender", "Ethnicity_def", "FamilyHistoryAutoimmuneDiseases", "LSLICCTotal", "SLEDAI_first", "SLEDAI_highest", "BILAG_highest", "BILAG_first","Flare_count_AnySEVERity", "Flare_per_year", "SLICC_last")]
+vars_to_test <- vars_to_test[! vars_to_test %in% c("Gender", "Ethnicity_def", "FamilyHistoryAutoimmuneDiseases", "LSLICCTotal", "SLEDAI_first", "SLEDAI_highest", "BILAG_highest", "BILAG_first","Flare_count_AnySEVERity", "Flare_per_year", "SLICC_last", "FU_more_1y")]
 
 
 anovaList <- list()
@@ -200,7 +248,7 @@ estimatesList <- list()
 
 
 for (i in vars_to_test){ 
-  model <- glm(paste("sum ~", i, paste("+Ethnicity_def + Gender + FamilyHistoryAutoimmuneDiseases")), family = "poisson", data=AAC_freq_filter.na)
+  model <- glm(paste("sum.y ~", i, paste("+ Gender + FamilyHistoryAutoimmuneDiseases")), family = "poisson", data=AAC_freq_filter.na_pub)
  anova <- anova(model, test="Chi")
   anovaList[i] <- anova$`Pr(>Chi)`[2]
   estimates_ <- summary(model)$coefficients
@@ -235,14 +283,13 @@ writeData(wb, sheet = df_name, estimatesList[[df_name]], rowNames = TRUE)
 
 ```{r}
 
-
 AAC_freq_filter.na <- AAC_freq_filter.na %>%
 mutate(Treament_Group = ifelse(Treament_Group == "Aggressive", "Intensive", "Non-intensive"))
 
 
 ##Treatment posthoc tests
 
-model <- glm(sum ~ Treament_Group*Ethnicity_def + Gender + FamilyHistoryAutoimmuneDiseases, family = "poisson", data=AAC_freq_filter.na)
+model <- glm(sum.y ~ Treament_Group*Ethnicity_def + Gender + FamilyHistoryAutoimmuneDiseases, family = "poisson", data=AAC_freq_filter.na_pub)
 anova <- anova(model, test="Chi")
 
 
@@ -258,47 +305,53 @@ lsmeans(model, pairwise ~ Treament_Group|Ethnicity_def, adjust = "tukey")
 #correlations
 ```{r}
 
-correlation <- cor.test(AAC_freq_filter.na$sum, AAC_freq_filter.na$Diagnosis_Age, method = "pearson")
-correlation <- cor.test(AAC_freq_filter.na$sum, AAC_freq_filter.na$BILAG_highest, method = "pearson")
-correlation <- cor.test(AAC_freq_filter.na$sum, AAC_freq_filter.na$SLEDAI_highest, method = "pearson")
-correlation <- cor.test(AAC_freq_filter.na$sum, AAC_freq_filter.na$SLICC_last, method = "pearson")
+correlation <- cor.test(AAC_freq_filter.na_pub$sum.y, AAC_freq_filter.na_pub$Diagnosis_Age, method = "pearson")
+correlation <- cor.test(AAC_freq_filter.na_pub$sum.y, AAC_freq_filter.na_pub$BILAG_highest, method = "pearson")
+correlation <- cor.test(AAC_freq_filter.na_pub$sum.y, as.numeric(AAC_freq_filter.na_pub$SLEDAI_highest), method = "pearson")
+correlation <- cor.test(AAC_freq_filter.na_pub$sum.y, AAC_freq_filter.na_pub$SLICC_last, method = "pearson")
 
 #adust pvalues using fdr
-adjust <- p.adjust(correlation$p.value, n=4, method = "fdr")
+adjust <- p.adjust(0.241, n=4, method = "fdr")
 
-
+adjust
 
 ##aac vs diganosis age within ethnicity groups
 
 # Get unique ethnicity values
-ethnicities <- unique(AAC_freq_filter.na$Ethnicity_def)
+ethnicities <- unique(AAC_freq_filter.na_pub$Ethnicity_def)
 
 # Create an empty list to store correlation results
 correlation_results <- list()
 
+
 # Loop through each ethnicity
 for (ethnicity in ethnicities) {
   # Subset the dataframe for the current ethnicity
-  subset_df <- subset(AAC_freq_filter.na, Ethnicity_def == ethnicity)
-  
+  subset_df <- subset(AAC_freq_filter.na_pub, Ethnicity_def == ethnicity)
+
   # Calculate correlation between count and diagnosis age within the current ethnicity
-  correlation <- cor.test(subset_df$sum, subset_df$Diagnosis_Age, method = "pearson")
+  correlation <- cor.test(subset_df$sum.y, subset_df$Diagnosis_Age, method = "pearson")
   
   # Store the correlation result
   correlation_results[[ethnicity]] <- correlation
 }
 
+cor.test(AAC_freq_filter.na_pub$Diagnosis_Age, AAC_freq_filter.na_pub$sum.)
+
 correlation_results
 
 #caucasian
-p.adjust(0.871, n=5, method="fdr")
+p.adjust(0.5697, n=5, method="fdr")
 #south asian
-p.adjust(0.009397, n=5, method="fdr")
+p.adjust(0.7065, n=5, method="fdr")
 #any other asian
-p.adjust(0.01555, n=5, method="fdr")
+p.adjust(0.7532, n=5, method="fdr")
 #black aff/carr
 p.adjust(0.319, n=5, method="fdr")
 #east asian
-p.adjust(0.8618, n=5, method="fdr")
+p.adjust(0.1913, n=5, method="fdr")
 
 ```
+
+
+
